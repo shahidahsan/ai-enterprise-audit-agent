@@ -1,0 +1,5 @@
+FROM pgvector/pgvector:pg16
+
+ENV POSTGRES_DB=audit_agent
+ENV POSTGRES_USER=audit_agent
+ENV POSTGRES_PASSWORD=audit_agent

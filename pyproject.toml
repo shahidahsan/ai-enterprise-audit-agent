@@ -1,0 +1,33 @@
+[project]
+name = "enterprise-audit-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "langchain-core>=0.3",
+    "langchain>=0.3",
+    "langchain-anthropic>=0.3",
+    "langchain-openai>=0.2",
+    "langchain-postgres>=0.0.12",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.3",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "langsmith>=0.1",
+    "deepeval>=2.0",
+    "streamlit>=1.40",
+    "pypdf>=5.1",
+    "python-dotenv>=1.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-mock>=3.14",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
