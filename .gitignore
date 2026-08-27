@@ -1,9 +1,11 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.deepeval/
 .venv/
 .env
 *.egg-info/
 .DS_Store
 eval_results.json
 pgdata/
+TODO.md

@@ -19,6 +19,7 @@ dependencies = [
     "streamlit>=1.40",
     "pypdf>=5.1",
     "python-dotenv>=1.0",
+    "langchain-text-splitters>=0.3",
 ]
 
 [dependency-groups]
