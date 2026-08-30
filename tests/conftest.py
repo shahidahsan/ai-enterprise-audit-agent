@@ -1,4 +1,6 @@
 """Shared fixtures for the test suite."""
+from unittest.mock import MagicMock
+
 import pytest
 
 from src.config import get_settings
@@ -35,3 +37,21 @@ def _settings_env(monkeypatch):
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture
+def make_mock_llm():
+    """Factory for a fake chat model standing in for a real LangChain BaseChatModel.
+
+    ``tool_call_responses`` is the scripted sequence of AIMessages returned by
+    successive calls to ``llm.bind_tools(tools).invoke(...)``. ``structured_result``
+    is what ``llm.with_structured_output(Schema).invoke(...)`` returns.
+    """
+
+    def _factory(tool_call_responses, structured_result):
+        llm = MagicMock(name="mock_chat_model")
+        llm.bind_tools.return_value.invoke.side_effect = tool_call_responses
+        llm.with_structured_output.return_value.invoke.return_value = structured_result
+        return llm
+
+    return _factory
