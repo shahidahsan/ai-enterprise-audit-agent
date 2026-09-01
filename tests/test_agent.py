@@ -92,10 +92,17 @@ def test_run_tool_loop_invokes_correct_tool_and_returns_final_text():
     fake_tool.invoke.return_value = {"absolute_change": 10, "percentage_variance": 10.0, "trend": "increase"}
     tools_by_name = {"calculate_variance": fake_tool}
 
-    result = _run_tool_loop(llm_with_tools, tools_by_name, messages=[])
+    result, steps = _run_tool_loop(llm_with_tools, tools_by_name, messages=[])
 
     fake_tool.invoke.assert_called_once_with({"current_val": 110, "prior_val": 100})
     assert result == "Net sales increased 10%."
+    assert steps == [
+        {
+            "tool": "calculate_variance",
+            "tool_input": {"current_val": 110, "prior_val": 100},
+            "output": str({"absolute_change": 10, "percentage_variance": 10.0, "trend": "increase"}),
+        }
+    ]
 
 
 def test_run_tool_loop_raises_after_exceeding_max_iterations():
@@ -129,7 +136,8 @@ def test_run_audit_query_returns_structured_output(make_mock_llm):
     )
     mock_llm = make_mock_llm(tool_call_responses=[tool_call_message, final_message], structured_result=expected)
 
-    result = run_audit_query("How did net sales change?", llm=mock_llm)
+    result, steps = run_audit_query("How did net sales change?", llm=mock_llm)
 
     assert result == expected
+    assert steps[0]["tool"] == "calculate_variance"
     mock_llm.with_structured_output.assert_called_once_with(AuditFinding)

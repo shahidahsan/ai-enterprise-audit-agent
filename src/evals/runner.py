@@ -25,7 +25,7 @@ def build_metrics() -> list:
 def build_test_case(case: EvalCase, store: AuditVectorStore) -> LLMTestCase:
     """Run the agent and retriever for one eval case and package a DeepEval test case."""
     retrieved_docs = store.similarity_search(case.question)
-    finding = run_audit_query(case.question, store=store)
+    finding, _steps = run_audit_query(case.question, store=store)
     actual_output = " ".join([finding.summary, *finding.data_points])
 
     return LLMTestCase(
@@ -74,3 +74,7 @@ def run_evaluation(
     report = {"aggregate": aggregate_scores(per_query), "per_query": per_query}
     output_path.write_text(json.dumps(report, indent=2))
     return report
+
+
+if __name__ == "__main__":
+    run_evaluation()

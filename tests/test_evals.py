@@ -35,7 +35,7 @@ def test_build_test_case_packages_agent_output_and_retrieval_context(mocker):
         compliance_status="PASSED",
         sources=["Item 7"],
     )
-    mocker.patch("src.evals.runner.run_audit_query", return_value=finding)
+    mocker.patch("src.evals.runner.run_audit_query", return_value=(finding, []))
     store = _fake_store([Document(page_content="Total net sales $416,161", metadata={"page": 26})])
 
     test_case = build_test_case(case, store)
@@ -91,7 +91,7 @@ def test_run_evaluation_writes_json_report(tmp_path, mocker):
         EvalCase(question="What was gross margin?", expected_answer="46.9%."),
     ]
     finding = AuditFinding(summary="An answer.", data_points=[], compliance_status="PASSED", sources=[])
-    mocker.patch("src.evals.runner.run_audit_query", return_value=finding)
+    mocker.patch("src.evals.runner.run_audit_query", return_value=(finding, []))
     store = _fake_store([Document(page_content="some context", metadata={})])
     metrics = [_fake_metric(FaithfulnessMetric, 0.75, "reason")]
     output_path = tmp_path / "eval_results.json"
