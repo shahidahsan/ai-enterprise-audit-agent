@@ -58,11 +58,11 @@ def test_build_llm_selects_chat_anthropic_for_anthropic_provider(mocker, monkeyp
 # --- build_tools ---------------------------------------------------------------
 
 
-def test_build_tools_returns_the_three_named_tools():
+def test_build_tools_returns_the_four_named_tools():
     tools = build_tools()
 
     names = {tool.name for tool in tools}
-    assert names == {"document_search", "calculate_variance", "compliance_flag_checker"}
+    assert names == {"document_search", "calculate_variance", "compliance_flag_checker", "verify_against_xbrl"}
 
 
 def test_build_tools_wires_injected_store_into_document_search():

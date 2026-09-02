@@ -15,6 +15,7 @@ from src.observability.tracing import configure_langsmith
 from src.tools.calculator_tool import calculate_variance
 from src.tools.compliance_tool import compliance_flag_checker
 from src.tools.search_tool import document_search
+from src.tools.xbrl_tool import verify_against_xbrl
 
 MAX_ITERATIONS = 6
 
@@ -60,6 +61,18 @@ def build_tools(store: AuditVectorStore | None = None) -> list[StructuredTool]:
                 "Check a clause of extracted text against a predefined compliance disclosure rule. "
                 "Args: clause_text (str), rule_type (str: one of revenue_recognition, risk_factor, "
                 "related_party_transaction, material_weakness)."
+            ),
+        ),
+        StructuredTool.from_function(
+            func=verify_against_xbrl,
+            name="verify_against_xbrl",
+            description=(
+                "Tie-out check: verify a financial figure you extracted from the filing text against "
+                "the company's authoritative structured XBRL data filed with the SEC. Use this whenever "
+                "you state a specific dollar figure, to confirm it against the source of record rather "
+                "than trusting your own reading of the prose. Args: concept (str: one of net_sales, "
+                "operating_income, gross_margin, net_income, research_development_expense), "
+                "fiscal_year (int), reported_value (float, in raw dollars, e.g. 416161000000 not 416161)."
             ),
         ),
     ]

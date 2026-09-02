@@ -20,6 +20,7 @@ dependencies = [
     "pypdf>=5.1",
     "python-dotenv>=1.0",
     "langchain-text-splitters>=0.3",
+    "requests>=2.32",
 ]
 
 [dependency-groups]
@@ -32,3 +33,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "live: exercises real external services (OpenAI, Postgres, live SEC EDGAR API) -- costs real API calls, opt-in via `pytest -m live`",
+]
+addopts = "-m 'not live'"
