@@ -19,6 +19,25 @@ from src.tools.xbrl_tool import APPLE_CIK, verify_against_xbrl
 
 MAX_ITERATIONS = 6
 
+_SEARCH_DESCRIPTION = "Search the indexed SEC filing for relevant passages. Args: query (str)."
+_VARIANCE_DESCRIPTION = (
+    "Compute absolute change, percentage variance, and trend between two numeric "
+    "values. Args: current_val (float), prior_val (float)."
+)
+_COMPLIANCE_DESCRIPTION = (
+    "Check a clause of extracted text against a predefined compliance disclosure rule. "
+    "Args: clause_text (str), rule_type (str: one of revenue_recognition, risk_factor, "
+    "related_party_transaction, material_weakness)."
+)
+_XBRL_DESCRIPTION = (
+    "Tie-out check: verify a financial figure you extracted from the filing text against "
+    "the company's authoritative structured XBRL data filed with the SEC. Use this whenever "
+    "you state a specific dollar figure, to confirm it against the source of record rather "
+    "than trusting your own reading of the prose. Args: concept (str: one of net_sales, "
+    "operating_income, gross_margin, net_income, research_development_expense), "
+    "fiscal_year (int), reported_value (float, in raw dollars, e.g. 416161000000 not 416161)."
+)
+
 
 class ToolStep(TypedDict):
     tool: str
@@ -50,40 +69,14 @@ def build_tools(
         return verify_against_xbrl(concept, fiscal_year, reported_value, cik=cik)
 
     return [
+        StructuredTool.from_function(func=_search, name="document_search", description=_SEARCH_DESCRIPTION),
         StructuredTool.from_function(
-            func=_search,
-            name="document_search",
-            description="Search the indexed SEC filing for relevant passages. Args: query (str).",
+            func=calculate_variance, name="calculate_variance", description=_VARIANCE_DESCRIPTION
         ),
         StructuredTool.from_function(
-            func=calculate_variance,
-            name="calculate_variance",
-            description=(
-                "Compute absolute change, percentage variance, and trend between two numeric "
-                "values. Args: current_val (float), prior_val (float)."
-            ),
+            func=compliance_flag_checker, name="compliance_flag_checker", description=_COMPLIANCE_DESCRIPTION
         ),
-        StructuredTool.from_function(
-            func=compliance_flag_checker,
-            name="compliance_flag_checker",
-            description=(
-                "Check a clause of extracted text against a predefined compliance disclosure rule. "
-                "Args: clause_text (str), rule_type (str: one of revenue_recognition, risk_factor, "
-                "related_party_transaction, material_weakness)."
-            ),
-        ),
-        StructuredTool.from_function(
-            func=_verify,
-            name="verify_against_xbrl",
-            description=(
-                "Tie-out check: verify a financial figure you extracted from the filing text against "
-                "the company's authoritative structured XBRL data filed with the SEC. Use this whenever "
-                "you state a specific dollar figure, to confirm it against the source of record rather "
-                "than trusting your own reading of the prose. Args: concept (str: one of net_sales, "
-                "operating_income, gross_margin, net_income, research_development_expense), "
-                "fiscal_year (int), reported_value (float, in raw dollars, e.g. 416161000000 not 416161)."
-            ),
-        ),
+        StructuredTool.from_function(func=_verify, name="verify_against_xbrl", description=_XBRL_DESCRIPTION),
     ]
 
 
