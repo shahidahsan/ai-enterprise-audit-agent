@@ -52,7 +52,11 @@ def verify_against_xbrl(
             continue
         fact = _select_full_year_fact(facts, fiscal_year)
         if fact is None:
-            raise ValueError(f"No full-year 10-K figure found for {concept!r} in fiscal year {fiscal_year}")
+            # This tag exists for the company but has no data for the requested year -- a
+            # company can switch which XBRL tag it reports a concept under between filings
+            # (found via NVIDIA: its FY2025 revenue moved from the first alias to "Revenues").
+            # Try the next alias rather than failing on the first tag that merely exists.
+            continue
 
         xbrl_value = fact["val"]
         difference_pct = round(abs(reported_value - xbrl_value) / xbrl_value * 100, 4)
@@ -68,4 +72,7 @@ def verify_against_xbrl(
             "source": "SEC EDGAR XBRL company facts API",
         }
 
-    raise ValueError(f"No SEC XBRL data found for concept {concept!r} (tried tags: {tags_to_try})")
+    raise ValueError(
+        f"No fiscal year {fiscal_year} 10-K figure found for concept {concept!r} "
+        f"(tried tags: {tags_to_try})"
+    )

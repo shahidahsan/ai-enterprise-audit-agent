@@ -2,12 +2,12 @@
 from src.indexer.vector_store import AuditVectorStore
 
 
-def document_search(query: str, store: AuditVectorStore | None = None) -> str:
+def document_search(query: str, store: AuditVectorStore | None = None, document_id: str | None = None) -> str:
     """Search indexed filing chunks and return top passages with source citations."""
     if not query.strip():
         raise ValueError("query must not be blank")
     store = store or AuditVectorStore()
-    results = store.similarity_search(query)
+    results = store.similarity_search(query, document_id=document_id)
     if not results:
         return "No relevant passages found."
 

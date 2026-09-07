@@ -26,3 +26,10 @@ class ExtractedFigure(BaseModel):
     unit: Literal["raw", "thousands", "millions", "billions"] | None = Field(
         None, description="The unit the printed number is stated in, per the table's header."
     )
+
+
+class FilingMetadata(BaseModel):
+    """Company name and fiscal year extracted from an uploaded filing's cover page."""
+
+    company_name: str = Field(..., description="The filer's legal company name, e.g. 'Apple Inc.'")
+    fiscal_year: int = Field(..., description="The fiscal year this filing covers, e.g. 2025.")

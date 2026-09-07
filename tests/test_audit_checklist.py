@@ -137,6 +137,23 @@ def test_run_tie_out_check_needs_review_when_xbrl_lookup_raises(mocker):
     assert "no data" in result["detail"]
 
 
+def test_run_tie_out_check_scopes_search_to_document_id_and_verifies_with_cik(mocker):
+    check = {"concept": "net_sales", "query": "total net sales", "label": "Net sales tie-out"}
+    store = _fake_store([Document(page_content="Total net sales $211,915", metadata={"page": 30})])
+    llm = _fake_llm(211915000000.0)
+    mock_verify = mocker.patch(
+        "src.agent.audit_checklist.verify_against_xbrl",
+        return_value={"match": True, "xbrl_value": 211915000000.0, "difference_pct": 0.0, "accession_number": "x"},
+    )
+
+    run_tie_out_check(check, llm=llm, store=store, fiscal_year=2025, document_id="msft_2025", cik="0000789019")
+
+    store.similarity_search.assert_called_once_with("total net sales", document_id="msft_2025")
+    mock_verify.assert_called_once_with(
+        concept="net_sales", fiscal_year=2025, reported_value=211915000000.0, cik="0000789019"
+    )
+
+
 # --- run_disclosure_check --------------------------------------------------------
 
 
@@ -164,6 +181,15 @@ def test_run_disclosure_check_needs_review_when_no_passages_found():
     result = run_disclosure_check(check, store=store)
 
     assert result["status"] == "NEEDS_REVIEW"
+
+
+def test_run_disclosure_check_scopes_search_to_document_id():
+    check = {"rule_type": "revenue_recognition", "query": "revenue recognition", "label": "Revenue recognition"}
+    store = _fake_store([Document(page_content="some clause", metadata={"page": 10})])
+
+    run_disclosure_check(check, store=store, document_id="msft_2025")
+
+    store.similarity_search.assert_called_once_with("revenue recognition", document_id="msft_2025")
 
 
 # --- run_full_audit ---------------------------------------------------------------

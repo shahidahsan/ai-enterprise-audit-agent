@@ -72,6 +72,32 @@ def test_verify_against_xbrl_tries_alias_tags_until_one_resolves(mocker):
     assert mock_get.call_count == 2
 
 
+def test_verify_against_xbrl_falls_through_when_first_alias_lacks_target_year(mocker):
+    """A tag can exist for a company but simply lack data for the requested fiscal year (e.g.
+    the company switched XBRL tags in a later filing) -- this must fall through to the next
+    alias, not hard-fail. Real bug found testing against NVIDIA's actual filing: NVIDIA's
+    RevenueFromContractWithCustomerExcludingAssessedTax has old data but no FY2025 entry, while
+    its FY2025 revenue is tagged under Revenues instead.
+    """
+    tag_exists_but_no_target_year = {
+        "units": {"USD": [{"fy": 2020, "fp": "FY", "form": "10-K", "val": 999, "accn": "old"}]}
+    }
+    tag_has_target_year = {
+        "units": {"USD": [{"fy": 2025, "fp": "FY", "form": "10-K", "val": 130497000000, "accn": "nvda-accn"}]}
+    }
+    mock_get = mocker.patch("src.tools.xbrl_tool.requests.get")
+    first_response = MagicMock(status_code=200)
+    first_response.json.return_value = tag_exists_but_no_target_year
+    second_response = MagicMock(status_code=200)
+    second_response.json.return_value = tag_has_target_year
+    mock_get.side_effect = [first_response, second_response]
+
+    result = verify_against_xbrl(concept="net_sales", fiscal_year=2025, reported_value=130497000000)
+
+    assert result["match"] is True
+    assert result["accession_number"] == "nvda-accn"
+
+
 def test_verify_against_xbrl_raises_for_unknown_concept(mocker):
     mock_get = mocker.patch("src.tools.xbrl_tool.requests.get")
     not_found = MagicMock(status_code=404)

@@ -52,7 +52,15 @@ def test_document_search_delegates_query_to_store():
 
     document_search("iPhone revenue trend", store=store)
 
-    store.similarity_search.assert_called_once_with("iPhone revenue trend")
+    store.similarity_search.assert_called_once_with("iPhone revenue trend", document_id=None)
+
+
+def test_document_search_scopes_to_document_id_when_given():
+    store = _fake_store([])
+
+    document_search("iPhone revenue trend", store=store, document_id="apple_2025")
+
+    store.similarity_search.assert_called_once_with("iPhone revenue trend", document_id="apple_2025")
 
 
 # --- calculate_variance -------------------------------------------------------

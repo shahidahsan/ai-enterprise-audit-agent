@@ -73,7 +73,28 @@ def test_build_tools_wires_injected_store_into_document_search():
     search_tool = next(t for t in tools if t.name == "document_search")
     search_tool.invoke({"query": "revenue"})
 
-    fake_store.similarity_search.assert_called_once_with("revenue")
+    fake_store.similarity_search.assert_called_once_with("revenue", document_id=None)
+
+
+def test_build_tools_scopes_document_search_to_document_id():
+    fake_store = MagicMock()
+    fake_store.similarity_search.return_value = []
+
+    tools = build_tools(store=fake_store, document_id="apple_2025")
+    search_tool = next(t for t in tools if t.name == "document_search")
+    search_tool.invoke({"query": "revenue"})
+
+    fake_store.similarity_search.assert_called_once_with("revenue", document_id="apple_2025")
+
+
+def test_build_tools_scopes_xbrl_verification_to_given_cik(mocker):
+    mock_verify = mocker.patch("src.agent.react_agent.verify_against_xbrl", return_value={"match": True})
+
+    tools = build_tools(cik="0000789019")
+    xbrl_tool = next(t for t in tools if t.name == "verify_against_xbrl")
+    xbrl_tool.invoke({"concept": "net_sales", "fiscal_year": 2025, "reported_value": 1.0})
+
+    mock_verify.assert_called_once_with("net_sales", 2025, 1.0, cik="0000789019")
 
 
 # --- _run_tool_loop -------------------------------------------------------------
@@ -141,3 +162,26 @@ def test_run_audit_query_returns_structured_output(make_mock_llm):
     assert result == expected
     assert steps[0]["tool"] == "calculate_variance"
     mock_llm.with_structured_output.assert_called_once_with(AuditFinding)
+
+
+def test_run_audit_query_forwards_document_id_and_cik_to_build_tools(mocker, make_mock_llm):
+    final_message = AIMessage(content="An answer.", tool_calls=[])
+    expected = AuditFinding(summary="x", compliance_status="PASSED")
+    mock_llm = make_mock_llm(tool_call_responses=[final_message], structured_result=expected)
+    mock_build_tools = mocker.patch("src.agent.react_agent.build_tools", wraps=lambda **kwargs: [])
+
+    run_audit_query("some question", llm=mock_llm, document_id="msft_2025", cik="0000789019")
+
+    mock_build_tools.assert_called_once_with(store=None, document_id="msft_2025", cik="0000789019")
+
+
+def test_run_audit_query_tells_the_agent_which_company_it_is_analyzing(make_mock_llm):
+    final_message = AIMessage(content="An answer.", tool_calls=[])
+    expected = AuditFinding(summary="x", compliance_status="PASSED")
+    mock_llm = make_mock_llm(tool_call_responses=[final_message], structured_result=expected)
+
+    run_audit_query("some question", llm=mock_llm, company_name="NVIDIA CORPORATION", fiscal_year=2025)
+
+    messages = mock_llm.bind_tools.return_value.invoke.call_args[0][0]
+    assert "NVIDIA CORPORATION" in messages[0].content
+    assert "2025" in messages[0].content

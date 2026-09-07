@@ -28,8 +28,9 @@ class AuditVectorStore:
     def add_documents(self, documents: list[Document]) -> list[str]:
         return self._store.add_documents(documents)
 
-    def similarity_search(self, query: str, k: int | None = None) -> list[Document]:
+    def similarity_search(self, query: str, k: int | None = None, document_id: str | None = None) -> list[Document]:
         if not query.strip():
             raise ValueError("query must not be blank")
         settings = get_settings()
-        return self._store.similarity_search(query, k=k or settings.retrieval_top_k)
+        doc_filter = {"document_id": document_id} if document_id else None
+        return self._store.similarity_search(query, k=k or settings.retrieval_top_k, filter=doc_filter)

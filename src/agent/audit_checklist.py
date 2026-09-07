@@ -9,16 +9,19 @@ from langchain_core.language_models import BaseChatModel
 from src.agent.schemas import ExtractedFigure
 from src.indexer.vector_store import AuditVectorStore
 from src.tools.compliance_tool import compliance_flag_checker
-from src.tools.xbrl_tool import verify_against_xbrl
+from src.tools.xbrl_tool import APPLE_CIK, verify_against_xbrl
 
-# All four figures live on the same Consolidated Statements of Operations page. A query naming
-# only the target concept (e.g. "research and development expense") tends to drift toward other
-# tables that repeat the same line-item label (e.g. a segment-reconciliation table) -- anchoring
-# every query on the statement's own title reliably retrieves the correctly-labeled table instead.
+# All four figures typically live on the same Consolidated Statements of Operations page. A
+# query naming only the target concept (e.g. "research and development expense") tends to drift
+# toward other tables that repeat the same line-item label (e.g. a segment-reconciliation table)
+# -- anchoring every query on the statement's own title reliably retrieves the correctly-labeled
+# table instead. This is company-agnostic (no company name/date baked in) so it generalizes to
+# any uploaded 10-K, though it assumes the common "Consolidated Statements of Operations" title;
+# a filing captioned differently (e.g. "...of Income") may retrieve less reliably.
 _STATEMENT_QUERY = (
-    "Apple Inc. CONSOLIDATED STATEMENTS OF OPERATIONS Years ended September 27 2025 net sales "
-    "cost of sales gross margin operating expenses research and development selling general "
-    "administrative operating income"
+    "CONSOLIDATED STATEMENTS OF OPERATIONS (In millions) Years ended net sales cost of sales "
+    "gross margin operating expenses research and development selling general and "
+    "administrative total operating expenses operating income"
 )
 
 FINANCIAL_CHECKS = [
@@ -83,9 +86,16 @@ def extract_figure(
     return result.value * _UNIT_MULTIPLIERS[result.unit]
 
 
-def run_tie_out_check(check: dict, llm: BaseChatModel, store: AuditVectorStore, fiscal_year: int) -> dict:
+def run_tie_out_check(
+    check: dict,
+    llm: BaseChatModel,
+    store: AuditVectorStore,
+    fiscal_year: int,
+    document_id: str | None = None,
+    cik: str = APPLE_CIK,
+) -> dict:
     """Extract a figure from retrieved passages and tie it out against SEC XBRL data."""
-    docs = store.similarity_search(check["query"])
+    docs = store.similarity_search(check["query"], document_id=document_id)
     passages = [doc.page_content for doc in docs]
     extracted_value = extract_figure(llm, passages, check["label"], fiscal_year)
 
@@ -93,7 +103,9 @@ def run_tie_out_check(check: dict, llm: BaseChatModel, store: AuditVectorStore, 
         return {**check, "status": "NEEDS_REVIEW", "extracted_value": None, "detail": "No figure extracted"}
 
     try:
-        tie_out = verify_against_xbrl(concept=check["concept"], fiscal_year=fiscal_year, reported_value=extracted_value)
+        tie_out = verify_against_xbrl(
+            concept=check["concept"], fiscal_year=fiscal_year, reported_value=extracted_value, cik=cik
+        )
     except ValueError as exc:
         return {**check, "status": "NEEDS_REVIEW", "extracted_value": extracted_value, "detail": str(exc)}
 
@@ -101,9 +113,9 @@ def run_tie_out_check(check: dict, llm: BaseChatModel, store: AuditVectorStore, 
     return {**check, "status": status, "extracted_value": extracted_value, "detail": tie_out}
 
 
-def run_disclosure_check(check: dict, store: AuditVectorStore) -> dict:
+def run_disclosure_check(check: dict, store: AuditVectorStore, document_id: str | None = None) -> dict:
     """Retrieve the most relevant passage and run it through the compliance checklist."""
-    docs = store.similarity_search(check["query"])
+    docs = store.similarity_search(check["query"], document_id=document_id)
     if not docs:
         return {**check, "status": "NEEDS_REVIEW", "citation": None, "source_page": None, "detail": "No passages found"}
 
@@ -119,7 +131,11 @@ def run_disclosure_check(check: dict, store: AuditVectorStore) -> dict:
 
 
 def run_full_audit(
-    llm: BaseChatModel | None = None, store: AuditVectorStore | None = None, fiscal_year: int = 2025
+    llm: BaseChatModel | None = None,
+    store: AuditVectorStore | None = None,
+    fiscal_year: int = 2025,
+    document_id: str | None = None,
+    cik: str = APPLE_CIK,
 ) -> list[dict]:
     """Run every tie-out and disclosure check and return one result row per check."""
     from src.agent.react_agent import build_llm
@@ -127,6 +143,9 @@ def run_full_audit(
     llm = llm or build_llm()
     store = store or AuditVectorStore()
 
-    results = [run_tie_out_check(check, llm=llm, store=store, fiscal_year=fiscal_year) for check in FINANCIAL_CHECKS]
-    results += [run_disclosure_check(check, store=store) for check in DISCLOSURE_CHECKS]
+    results = [
+        run_tie_out_check(check, llm=llm, store=store, fiscal_year=fiscal_year, document_id=document_id, cik=cik)
+        for check in FINANCIAL_CHECKS
+    ]
+    results += [run_disclosure_check(check, store=store, document_id=document_id) for check in DISCLOSURE_CHECKS]
     return results

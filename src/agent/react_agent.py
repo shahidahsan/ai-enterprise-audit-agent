@@ -7,7 +7,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, To
 from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
 
-from src.agent.prompts import SYSTEM_PROMPT
+from src.agent.prompts import build_system_prompt
 from src.agent.schemas import AuditFinding
 from src.config import Settings, get_settings
 from src.indexer.vector_store import AuditVectorStore
@@ -15,7 +15,7 @@ from src.observability.tracing import configure_langsmith
 from src.tools.calculator_tool import calculate_variance
 from src.tools.compliance_tool import compliance_flag_checker
 from src.tools.search_tool import document_search
-from src.tools.xbrl_tool import verify_against_xbrl
+from src.tools.xbrl_tool import APPLE_CIK, verify_against_xbrl
 
 MAX_ITERATIONS = 6
 
@@ -34,11 +34,20 @@ def build_llm(settings: Settings | None = None) -> BaseChatModel:
     return ChatOpenAI(model=settings.agent_model, api_key=settings.openai_api_key)
 
 
-def build_tools(store: AuditVectorStore | None = None) -> list[StructuredTool]:
-    """Wrap the deterministic tool functions as LangChain tools for the LLM to call."""
+def build_tools(
+    store: AuditVectorStore | None = None, document_id: str | None = None, cik: str = APPLE_CIK
+) -> list[StructuredTool]:
+    """Wrap the deterministic tool functions as LangChain tools for the LLM to call.
+
+    document_id scopes document_search to one indexed filing; cik scopes verify_against_xbrl to
+    that filing's company. Both are closed over here rather than exposed to the LLM as tool args.
+    """
 
     def _search(query: str) -> str:
-        return document_search(query, store=store)
+        return document_search(query, store=store, document_id=document_id)
+
+    def _verify(concept: str, fiscal_year: int, reported_value: float) -> dict:
+        return verify_against_xbrl(concept, fiscal_year, reported_value, cik=cik)
 
     return [
         StructuredTool.from_function(
@@ -64,7 +73,7 @@ def build_tools(store: AuditVectorStore | None = None) -> list[StructuredTool]:
             ),
         ),
         StructuredTool.from_function(
-            func=verify_against_xbrl,
+            func=_verify,
             name="verify_against_xbrl",
             description=(
                 "Tie-out check: verify a financial figure you extracted from the filing text against "
@@ -100,8 +109,16 @@ def run_audit_query(
     query: str,
     llm: BaseChatModel | None = None,
     store: AuditVectorStore | None = None,
+    document_id: str | None = None,
+    cik: str = APPLE_CIK,
+    company_name: str | None = None,
+    fiscal_year: int | None = None,
 ) -> tuple[AuditFinding, list[ToolStep]]:
     """Run the ReAct tool loop for a query, then enforce the AuditFinding output schema.
+
+    company_name/fiscal_year give the agent situational awareness of which filing it's
+    analyzing (without this it can't even answer "what document is loaded"); document_id/cik
+    separately scope its tools to that same filing.
 
     Returns the structured finding alongside the tool-call trace (for UI display).
     """
@@ -109,11 +126,12 @@ def run_audit_query(
     configure_langsmith(settings)
     llm = llm or build_llm(settings)
 
-    tools = build_tools(store=store)
+    tools = build_tools(store=store, document_id=document_id, cik=cik)
     tools_by_name = {tool.name: tool for tool in tools}
     llm_with_tools = llm.bind_tools(tools)
 
-    messages: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=query)]
+    system_prompt = build_system_prompt(company_name=company_name, fiscal_year=fiscal_year)
+    messages: list[BaseMessage] = [SystemMessage(content=system_prompt), HumanMessage(content=query)]
     final_text, steps = _run_tool_loop(llm_with_tools, tools_by_name, messages)
 
     structurer = llm.with_structured_output(AuditFinding)

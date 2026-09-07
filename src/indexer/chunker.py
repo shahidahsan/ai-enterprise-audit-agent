@@ -50,16 +50,19 @@ def chunk_documents(
     documents: list[Document],
     chunk_size: int | None = None,
     chunk_overlap: int | None = None,
+    document_id: str | None = None,
 ) -> list[Document]:
     """Split page-level documents into overlapping, token-bounded chunks."""
     splitter = build_text_splitter(chunk_size, chunk_overlap)
     chunks = splitter.split_documents(documents)
     for index, chunk in enumerate(chunks):
         chunk.metadata["chunk_index"] = index
+        if document_id is not None:
+            chunk.metadata["document_id"] = document_id
     return chunks
 
 
-def load_and_chunk_pdf(pdf_path: str | Path) -> list[Document]:
+def load_and_chunk_pdf(pdf_path: str | Path, document_id: str | None = None) -> list[Document]:
     """Load a PDF and split it into indexable chunks in one step."""
     pages = load_pdf_pages(pdf_path)
-    return chunk_documents(pages)
+    return chunk_documents(pages, document_id=document_id)

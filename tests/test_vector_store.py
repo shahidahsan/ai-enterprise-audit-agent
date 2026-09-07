@@ -44,7 +44,7 @@ def test_similarity_search_delegates_with_default_top_k(mock_pgvector_cls, mock_
     store = AuditVectorStore()
     results = store.similarity_search("What was gross margin?")
 
-    mock_instance.similarity_search.assert_called_once_with("What was gross margin?", k=5)
+    mock_instance.similarity_search.assert_called_once_with("What was gross margin?", k=5, filter=None)
     assert results == expected
 
 
@@ -55,7 +55,19 @@ def test_similarity_search_respects_explicit_top_k(mock_pgvector_cls, mock_embed
     store = AuditVectorStore()
     store.similarity_search("iPhone revenue", k=2)
 
-    mock_instance.similarity_search.assert_called_once_with("iPhone revenue", k=2)
+    mock_instance.similarity_search.assert_called_once_with("iPhone revenue", k=2, filter=None)
+
+
+def test_similarity_search_filters_by_document_id_when_given(mock_pgvector_cls, mock_embeddings):
+    mock_instance = mock_pgvector_cls.return_value
+    mock_instance.similarity_search.return_value = []
+
+    store = AuditVectorStore()
+    store.similarity_search("iPhone revenue", document_id="apple_2025")
+
+    mock_instance.similarity_search.assert_called_once_with(
+        "iPhone revenue", k=5, filter={"document_id": "apple_2025"}
+    )
 
 
 def test_similarity_search_rejects_blank_query(mock_pgvector_cls, mock_embeddings):

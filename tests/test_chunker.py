@@ -58,6 +58,22 @@ def test_chunk_documents_assigns_sequential_chunk_index():
     assert [chunk.metadata["chunk_index"] for chunk in chunks] == list(range(len(chunks)))
 
 
+def test_chunk_documents_tags_document_id_when_given():
+    documents = [Document(page_content="Short filing text.", metadata={"page": 3, "section": "Item 1"})]
+
+    chunks = chunk_documents(documents, document_id="apple_2025")
+
+    assert chunks[0].metadata["document_id"] == "apple_2025"
+
+
+def test_chunk_documents_omits_document_id_when_not_given():
+    documents = [Document(page_content="Short filing text.", metadata={"page": 3, "section": "Item 1"})]
+
+    chunks = chunk_documents(documents)
+
+    assert "document_id" not in chunks[0].metadata
+
+
 def test_chunk_documents_respects_configured_chunk_size_in_tokens():
     long_text = "Material weakness in internal controls over financial reporting. " * 500
     documents = [Document(page_content=long_text, metadata={"page": 1, "section": "Item 9A"})]
@@ -74,3 +90,9 @@ def test_load_and_chunk_pdf_end_to_end_on_sample_filing():
     assert all("page" in chunk.metadata for chunk in chunks)
     assert all("section" in chunk.metadata for chunk in chunks)
     assert all("chunk_index" in chunk.metadata for chunk in chunks)
+
+
+def test_load_and_chunk_pdf_tags_document_id_when_given():
+    chunks = load_and_chunk_pdf(SAMPLE_PDF, document_id="apple_2025")
+
+    assert all(chunk.metadata["document_id"] == "apple_2025" for chunk in chunks)
