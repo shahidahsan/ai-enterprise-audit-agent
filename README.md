@@ -175,52 +175,6 @@ instead of the project root, so plain `src.*` imports fail without it.
     live per-check progress), and a right panel showing the latest eval scorecard, last-query
     latency, and a LangSmith link.
 
-## Real bugs this caught (and how they were fixed)
-
-Real bugs, found by actually testing against real filings rather than by inspection -- each one
-directly shaped a design decision above.
-
-**1. Wrong-year extraction + unit-scale arithmetic (Phase 7).** Manual testing of "Run Full Audit"
-surfaced a genuine LLM extraction failure: the agent read Apple's **FY2024** operating income and
-R&D figures out of a 3-year comparison table instead of FY2025's, because both years sit in the
-same table/column-adjacent layout. The XBRL tie-out tool flagged both as mismatches against SEC's
-structured data -- exactly the failure mode it exists to catch.
-- *Retrieval drift*: the fixed query for those two concepts matched a segment-reconciliation table
-  (which repeats the same "Research and development" line-item label) instead of the actual
-  Consolidated Statements of Operations. Fixed by anchoring the retrieval query on the statement's
-  own title/structure.
-- *Unit-scale arithmetic*: the first fix asked the LLM to do the "in millions" -> raw-USD
-  conversion itself via a prompt instruction. That fixed the immediate case but *introduced a
-  different bug* on a later run (over-multiplying gross margin by 1000x) -- confirmed via 3
-  repeated live runs. The durable fix: `ExtractedFigure` now has separate `value`/`unit` fields;
-  the LLM only reads the number as printed plus its unit label, and Python does the multiplication
-  deterministically. Same principle as `calculate_variance` -- never let an LLM do arithmetic that
-  code can do exactly.
-
-**2. XBRL alias fallback stopped too early (Phase 8).** Testing tie-out against a real NVIDIA
-filing (not Apple) found that `verify_against_xbrl` gave up as soon as it found an XBRL tag that
-existed *at all* for the company, even if that tag had no data for the requested fiscal year.
-NVIDIA reports revenue under a different `us-gaap` tag than Apple does, so the old logic never
-tried the next alias. Fixed to keep trying aliases until one actually has the year's data.
-
-**3. The agent didn't know what it was looking at (Phase 8).** Once multiple filings could be
-selected, asking "what document is loaded" made the agent respond "no access to specific SEC
-documents" -- nothing in its prompt ever named the company or year, even though its tools were
-correctly scoped to it. Fixed via `build_system_prompt()` injecting the selected document's
-company name and fiscal year into the system prompt on every query.
-
-**4. An unscoped test broke the moment multi-document data was real (Phase 8).**
-`tests/test_live_extraction.py` searched without a `document_id` filter -- harmless while Apple
-was the only indexed filing, but it started silently mixing in NVIDIA's and a user-uploaded
-Microsoft filing's chunks once those existed in the same store, causing spurious tie-out failures.
-Fixed by pinning the test to Apple's `document_id` explicitly, the same way real usage always
-scopes a query to one selected document.
-
-\#1 is also why `tests/test_live_extraction.py` exists as a real (unmocked) regression test
-(`pytest -m live`) in the first place -- the DeepEval suite never caught it because it exercises a
-different code path (the full ReAct loop), not the one-shot extractor added for the tie-out
-checklist.
-
 ## Known nuances / limitations
 
 - Re-running the indexer CLI appends duplicate chunks rather than replacing the collection.
@@ -239,25 +193,3 @@ checklist.
 - The document registry (`data/documents.json`) is a local JSON file, not part of Postgres itself
   -- fine for a single-user demo, would need a real table (or at least file locking) for
   concurrent multi-user use.
-
-## Loom demo outline (~9 min)
-
-1. **Intro (30s)** — positioning: not "chat with a PDF" but an internal-audit copilot doing
-   tie-out and disclosure-checklist review, the same category as MindBridge AI / Trullion.
-2. **Setup (30s)** — `.env`, `docker compose up -d`, mention Postgres+pgvector.
-3. **Upload a new company live (1.5 min)** — in the Streamlit sidebar, upload a 10-K for a company
-   never seen before (not Apple), show it auto-identify the company/fiscal-year/CIK, and appear in
-   the document picker. This is the strongest "this actually generalizes" beat.
-4. **Tests (1 min)** — `uv run pytest`, all green; call out the TDD-first workflow, the
-   50-line-function / 300-line-file discipline, and the `-m live` regression suite split.
-5. **Live agent (1.5 min)** — switch between two indexed filings in the sidebar, ask the same
-   question against each, show the compliance badge and tool-call expanders including a
-   `verify_against_xbrl` call scoped to whichever company is selected.
-6. **Run Full Audit (1.5 min)** — click into the checklist tab, walk through the live per-check
-   progress, land on the summary table. Narrate the real bug story: this is where the tie-out
-   check caught the agent reading the wrong fiscal year, and how the fix works.
-7. **Tracing (1 min)** — jump to the LangSmith project, open the trace for one of those queries.
-8. **Evals (1 min)** — show the eval scorecard and `eval_results.json`, discuss what the scores
-   mean and why this feature's own bugs lived outside the eval suite's coverage.
-9. **Wrap-up (30s)** — recap the pluggable-provider design, multi-document architecture, and the
-   overall system.
